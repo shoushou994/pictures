@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        ul li {
+            list-style: none;
+        }
+
+        a {
+            text-deneration: none;
+        }
+
+        html, body, #pictures {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        header {
+            width: 100%;
+            height: 10vh;
+            background: #000;
+            font-family: 微软雅黑;
+            font-size: 20px;
+            line-height: 10vh;
+            text-align: center;
+            color: #fff;
+            position: relative;
+            z-index: 5;
+        }
+
+        main {
+            height: 90vh;
+        }
+
+        #content {
+            position: relative;
+        }
+
+        #imgList {
+            overflow: hidden;
+        }
+
+        li {
+            width: 46vw;
+            height: 46vw;
+            margin: 2vw;
+            float: left;
+            border-radius: 5vw;
+            overflow: hidden;
+            background: url('img/loadingImg.gif') no-repeat;
+            background-position: center;
+        }
+
+        li img {
+            width: 100%;
+            display: block;
+            transition: all 1s;
+        }
+
+        .pull-up-update {
+            position: absolute;
+            bottom: -20vh;
+            width: 100%;
+            height: 20vh;
+            font-size: 20px;
+            line-height: 20vh;
+            text-align: center;
+            z-index: 10;
+        }
+
+        #big-image-page {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            overflow: hidden;
+            z-index: 9;
+            transform: scale(0);
+            transition: transform 0.8s;
+        }
+
+        #show-area {
+            width: 100%;
+            height: 90vh;
+            position: relative;
+        }
+
+        #show-area img {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            margin: auto;
+        }
+        .close{
+            position: absolute;
+            top: 0;
+            right: 20px;
+            font-size: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="pictures">
+    <header>三国女将</header>
+    <main>
+        <div id="content">
+            <ul id="imgList">
+            </ul>
+
+            <div class="pull-up-update">上拉加载更多数据</div>
+        </div>
+    </main>
+</div>
+
+<div id="big-image-page">
+    <header>大图预览
+        <span class="close">×</span>
+    </header>
+    <section id="show-area">
+        <img id="big-image" src="img/1.jpg" alt="">
+    </section>
+</div>
+
+
+<script src="js/transformCSS.js"></script>
+<script src="js/tweenAnimation.js"></script>
+<script src="js/touchscroll.js"></script>
+<script src="js/gesture.js"></script>
+<script src="js/touchview.js"></script>
+
+<script src="https://cdn.bootcss.com/vConsole/3.3.2/vconsole.min.js"></script>
+<script>
+    //阻止默认行为
+    document.documentElement.addEventListener('tarchstart', function (e) {
+        e.preventDefault();
+    }, {
+        passive: false
+    });
+
+
+    var main = document.querySelector('main');
+    var content = document.querySelector('#content');
+    var imgList = document.querySelector('#imgList');
+    var pullUpUpdate = document.querySelector('.pull-up-update');
+    var bigImagePage = document.querySelector('#big-image-page');
+    var close = document.querySelector('.close');
+    var bigImage = document.querySelector('#big-image');
+    //每次呈现图片的数量
+    var num = 16;
+    var page = 1;//显示页数
+    var isMoving = false;
+
+    new VConsole;
+
+
+    //初始化 数据仓库
+    //100张图片
+    var imgData = [];
+    for (var i = 0; i < 100; i++) {
+        imgData[i] = 'img/' + (i % 18 + 1) + '.jpg';
+        // imgData[i] = 'https://picsum.photos/id/'+i+'/400/400';
+    }
+
+    //创建 li  img 标签
+    function createLi() {
+        // page     1     2     3
+        // start    0     16    32
+        // end      16    32    48
+        var start = (page - 1) * num;
+        var end = page * num;
+        for (var i = 0; i < 16; i++) {
+            var li = document.createElement('li');
+            var img = document.createElement('img');
+            // img.src = imgData[i];
+            //标识 li 是未加载的情况
+            li.setAttribute('loaded', 0);
+            li.dataset.src = imgData[i]; //创建自定义属性
+            li.appendChild(img);
+            imgList.appendChild(li);
+        }
+        //页码自增
+        page++;
+
+        lazyLoad();
+    }
+    createLi();
+
+    // main.addEventListener('touchmove',function () {
+    //     lazyLoad();
+    // })
+
+    function lazyLoad() {
+        var lis = document.querySelectorAll('#imgList li');
+        //检测每一个 li 是否进入到可视区域
+        lis.forEach(function (li) {
+            //获取 li 的偏移量
+            var liTop = li.offsetTop;
+            //获取容器的高度
+            var mainH = main.offsetHeight;
+            // 获取包裹元素的偏移位置
+            var translateY = -transformCSS(content, 'translateY');
+            //判断 加载图片 临界值
+            if (liTop < mainH + translateY) {
+                if (li.getAttribute('loaded') == '1') return;
+                var img = li.querySelector('img');
+                img.style.opacity = 0;
+                setTimeout(function () {
+                    // 获取 src 属性
+                    var src = li.dataset.src;
+                    img.src = src;
+                    img.onload = function () {
+                        this.style.opacity = 1;
+                    }
+
+                    //图片加载失败事件
+                    img.onerror = function () {
+                        img.src = 'img/noimage.png';
+                        this.style.opacity = 1;
+                    }
+                }, 1000)
+                li.setAttribute('loaded', 1);
+            }
+        })
+    }
+
+    //触摸滑动
+    var touchscroll = new Touchscroll('main', '#content', {
+        move: function () {
+            //每次滚动都检测懒加载状态
+            lazyLoad();
+
+            //获取当前的 translateY
+            var translateY = transformCSS(content, 'translateY');
+            var minTranslateY = main.offsetHeight - content.offsetHeight;
+            if (translateY < minTranslateY) {
+                //划出了边界，  修改显示比例
+                var disY = Math.abs(translateY - minTranslateY);
+                pullUpUpdate.style.scale = Math.min(disY / pullUpUpdate.offsetHeight, 1);
+                transformCSS(pullUpUpdate, 'scale', pullUpUpdate.style.scale);
+            }
+        },
+        end: function () {
+            if (pullUpUpdate.style.scale >= 1) {
+                createLi();
+
+                //更行滚动条的高度
+                touchscroll.init();
+                //获取滚动条
+                var scrollBar = document.querySelector('.scroll-bar');
+                //修改位置
+                var scrollBarTranslateY = -transformCSS(content, 'translateY') / content.offsetHeight * main.offsetHeight
+
+                //清除定时器，解决加载内容后滚动条位置跳动问题
+                clearInterval(scrollBar.timer['translateY']);
+                clearInterval(content.timer['translateY']);
+                transformCSS(scrollBar, 'translateY', scrollBarTranslateY);
+            }
+            //设置为 0
+            pullUpUpdate.style.scale = 0;
+        }
+    });
+    
+    //大图呈现效果
+    imgList.addEventListener('touchend',function (e) {
+        if (e.target.nodeName === 'IMG'){
+            if (isMoving) return;
+            var src = e.target.src;
+            bigImage.src = src;
+
+            //获取触摸的位置，
+            var x = e.changedTouches[0].clientX;
+            var y = e.changedTouches[0].clientY;
+            bigImagePage.style.transformOrigin = x+'px '+y+'px';
+
+            transformCSS(bigImagePage,'scale',1);
+        }
+    });
+
+    close.addEventListener('touchstart',function () {
+        transformCSS(bigImagePage,'scale',0);
+    });
+    bigImagePage.addEventListener('transitionend',function () {
+        transformCSS(bigImage,'rotate',0);
+        transformCSS(bigImage,'scale',1);
+    });
+    main.addEventListener('touchmove',function () {
+        isMoving = true;
+    });
+    main.addEventListener('touchend',function () {
+        isMoving = false;
+    });
+
+    //图片的旋转缩放
+    new Touchview('#big-image');
+
+
+</script>
+
+</body>
+</html>
